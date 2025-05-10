@@ -7,7 +7,7 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 
 from pyvqnet import kint64, kfloat32
 from pyvqnet.tensor import QTensor, zeros, ones, reshape, max
-from pyvqnet.nn import Module, Conv1D, MaxPool1D, Linear, ReLu, Dropout, Softmax, CrossEntropyLoss
+from pyvqnet.nn import Module, Conv1D, MaxPool1D, Linear, ReLu, Dropout, Softmax, CrossEntropyLoss, BatchNorm1d, Sigmoid
 from pyvqnet.optim import Adam
 from pyvqnet.data import data_generator
 
@@ -87,19 +87,22 @@ class AirQualityCNN(Module):
     def __init__(self, input_dim, output_dim):
         super(AirQualityCNN, self).__init__()
         self.conv1 = Conv1D(1, 4, kernel_size=2, padding=0, dtype=kfloat32)
+        # self.bn1 = BatchNorm1d(4, dtype=kfloat32)
+        # self.bn2 = BatchNorm1d(8, dtype=kfloat32)
         self.pool = MaxPool1D([2],[2], "valid")
         self.fc1 = Linear(4 * ((input_dim - 2 + 1) // 2), 8, dtype=kfloat32)  # 4 * ((input_dim - 2 + 1) // 2) 是卷积和池化后的特征数量
         self.fc2 = Linear(8, output_dim, dtype=kfloat32)
-        self.relu = ReLu()
+        # self.relu = ReLu()
+        self.swish = Sigmoid()
 
     def forward(self, x):
         x = reshape(x,(x.shape[0], 1, x.shape[1]))  # 转换为1D卷积输入格式
         x = self.conv1(x)
-        x = self.relu(x)
+        x = x * self.swish(x)
         x = self.pool(x)
         x = x.flatten(1)
         x = self.fc1(x)
-        x = self.relu(x)
+        x = x * self.swish(x)
         x = self.fc2(x)
         # x = self.softmax(x) # 不需要在这里使用softmax，因为CrossEntropyLoss会自动处理softmax
         return x
@@ -148,12 +151,12 @@ def main():
     
     # 训练参数
     batch_size = 32
-    epochs = 100
+    epochs = 1000
 
-    train_samples = X_train.shape[0]  # 总样本数
-    total_steps = (train_samples + batch_size - 1) // batch_size  # 向上取整计算总步数
-    print(f"总步数: {total_steps}")
-    print(f"训练样本数: {train_samples}")
+    # train_samples = X_train.shape[0]  # 总样本数
+    # total_steps = (train_samples + batch_size - 1) // batch_size  # 向上取整计算总步数
+    # print(f"总步数: {total_steps}")
+    # print(f"训练样本数: {train_samples}")
     
     # 创建数据生成器（使用原始numpy数组）
     train_loader = data_generator(X_train, y_train, batch_size, shuffle=True)
@@ -181,9 +184,9 @@ def main():
             total_loss += loss.item()
         
         # 每10个epoch打印一次训练信息
-        if (epoch + 1) % 10 == 0:
-            avg_loss = total_loss / total_steps  # 使用预计算的总步数
-            print(f"Epoch {epoch + 1}/{epochs}, Loss: {avg_loss:.4f}")
+        # if (epoch + 1) % 10 == 0:
+        #     avg_loss = total_loss / total_steps  # 使用预计算的总步数
+        #     print(f"Epoch {epoch + 1}/{epochs}, Loss: {avg_loss:.4f}")
     
     # 评估模型
     model.eval()
@@ -211,8 +214,8 @@ def main():
         
     # 保存结果到文本文件
     with open('results.txt', 'w') as f:
-        f.write(f"准确率: {accuracy:.4f}\n")
-        f.write(f"平均F1分数: {mean_f1:.4f}\n")
+        f.write(f"Accuracy: {accuracy:.4f}\n")
+        f.write(f"Average F1 Score: {mean_f1:.4f}\n")
 
 if __name__ == "__main__":
     main()
@@ -274,17 +277,5 @@ if __name__ == "__main__":
 # 已将除 Temperature 外的负值设置为 0。
 # 已将 Humidity 超过 100 的值设置为 100。
 # 模型参数数量: 184
-# 总步数: 125
-# 训练样本数: 4000
-# Epoch 10/100, Loss: 0.0000
-# Epoch 20/100, Loss: 0.0000
-# Epoch 30/100, Loss: 0.0000
-# Epoch 40/100, Loss: 0.0000
-# Epoch 50/100, Loss: 0.0000
-# Epoch 60/100, Loss: 0.0000
-# Epoch 70/100, Loss: 0.0000
-# Epoch 80/100, Loss: 0.0000
-# Epoch 90/100, Loss: 0.0000
-# Epoch 100/100, Loss: 0.0000
-# 准确率: 0.9080
-# 平均F1分数: 0.8853
+# 准确率: 0.9060
+# 平均F1分数: 0.8823
